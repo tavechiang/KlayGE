@@ -1,0 +1,80 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="util.fxml"/>
+
+	<macro name="BLOCK_X" value="16"/>
+	<macro name="BLOCK_Y" value="16"/>
+	<macro name="BLOCK_SIZE" value="(BLOCK_X * BLOCK_Y)"/>
+	<macro name="TILE_SIZE" value="32"/>
+
+	<parameter type="texture2DMS" name="g_buffer_ms_rt0_tex"/>
+	<parameter type="texture2DMS" name="g_buffer_ms_rt1_tex"/>
+	<parameter type="texture2DMS" name="g_buffer_ms_ds_tex"/>
+	<parameter type="texture2DMS" name="lighting_mask_ms_tex"/>
+	<parameter type="rw_texture2D" elem_type="unorm float4" name="g_buffer_resolved_rt0_rw_tex"/>
+	<parameter type="rw_texture2D" elem_type="unorm float4" name="g_buffer_resolved_rt1_rw_tex"/>
+	<parameter type="rw_texture2D" elem_type="float2" name="g_buffer_resolved_ds_rw_tex"/>
+	<parameter type="rw_texture2D" elem_type="float" name="g_buffer_resolved_depth_rw_tex"/>
+	<parameter type="rw_texture2D" elem_type="unorm float" name="lighting_mask_resolved_tex"/>
+	<parameter type="rw_texture2D" elem_type="unorm float" name="ms_mark_tex"/>
+
+	<parameter type="float4" name="near_q_far"/>
+
+	<shader type="compute_shader" version="5">
+		<![CDATA[
+[numthreads(BLOCK_X, BLOCK_Y, 1)]
+void ResolveGBuffersCS(uint3 gid : SV_GroupID,
+						uint3 gtid : SV_GroupThreadID,
+						uint GI : SV_GroupIndex)
+{
+	uint width, height, samples;
+	g_buffer_ms_rt0_tex.GetDimensions(width, height, samples);
+	
+	uint2 tile_start = gid.xy * TILE_SIZE + gtid.xy;
+	for (uint tile_y = 0; tile_y < TILE_SIZE; tile_y += BLOCK_Y)
+	{
+		for (uint tile_x = 0; tile_x < TILE_SIZE; tile_x += BLOCK_X)
+		{
+			uint2 coord = min(tile_start + uint2(tile_x, tile_y), uint2(width, height));
+
+			float min_depth = g_buffer_ms_ds_tex.Load(coord, 0).x;
+			uint min_index = 0;
+			bool is_multi_sample = false;
+			for (uint i = 1; i < samples; ++ i)
+			{
+				float non_linear_depth = g_buffer_ms_ds_tex.Load(coord, i).x;
+				if (abs(non_linear_depth - min_depth) > 1e-6f)
+				{
+					is_multi_sample = true;
+				}
+				if (non_linear_depth < min_depth)
+				{
+					min_depth = non_linear_depth;
+					min_index = i;
+				}
+			}
+			
+			g_buffer_resolved_ds_rw_tex[coord] = float2(min_depth, 0);
+
+			float depth = non_linear_depth_to_linear(min_depth, near_q_far.x, near_q_far.y);
+			g_buffer_resolved_depth_rw_tex[coord] = depth;
+
+			g_buffer_resolved_rt0_rw_tex[coord] = g_buffer_ms_rt0_tex.Load(coord, min_index);
+			g_buffer_resolved_rt1_rw_tex[coord] = g_buffer_ms_rt1_tex.Load(coord, min_index);
+			
+			lighting_mask_resolved_tex[coord] = lighting_mask_ms_tex.Load(coord, min_index).x;
+			
+			ms_mark_tex[coord] = is_multi_sample ? 1.0f : 0.0f;
+		}
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="ResolveGBuffers">
+		<pass name="p0">
+			<state name="compute_shader" value="ResolveGBuffersCS()"/>
+		</pass>
+	</technique>
+</effect>

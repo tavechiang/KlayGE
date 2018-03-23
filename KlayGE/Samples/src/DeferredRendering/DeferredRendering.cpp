@@ -294,7 +294,7 @@ void DeferredRenderingApp::OnResize(uint32_t width, uint32_t height)
 	App3DFramework::OnResize(width, height);
 
 	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-	deferred_rendering_->SetupViewport(0, re.CurFrameBuffer(), 0);
+	deferred_rendering_->SetupViewport(0, re.CurFrameBuffer(), 0, 4, 0);
 
 	UIManager::Instance().SettleCtrls();
 }

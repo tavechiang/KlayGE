@@ -70,14 +70,21 @@ namespace KlayGE
 		uint32_t attrib;
 
 		FrameBufferPtr frame_buffer;
+		uint32_t sample_count = 1;
+		uint32_t sample_quality = 0;
 
 		std::array<bool, PTB_None> g_buffer_enables;
 
-		FrameBufferPtr g_buffer;
-		TexturePtr g_buffer_rt0_tex;
-		TexturePtr g_buffer_rt1_tex;
-		TexturePtr g_buffer_ds_tex;
-		TexturePtr g_buffer_depth_tex;
+		FrameBufferPtr g_buffer_ms;
+		FrameBufferPtr g_buffer_ss;
+		TexturePtr g_buffer_ms_rt0_tex;
+		TexturePtr g_buffer_resolved_rt0_tex;
+		TexturePtr g_buffer_ms_rt1_tex;
+		TexturePtr g_buffer_resolved_rt1_tex;
+		TexturePtr g_buffer_ms_ds_tex;
+		TexturePtr g_buffer_resolved_ds_tex;
+		TexturePtr g_buffer_ms_depth_tex;
+		TexturePtr g_buffer_resolved_depth_tex;
 		TexturePtr g_buffer_rt0_backup_tex;
 #if DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
 		std::vector<TexturePtr> g_buffer_min_max_depth_texs;
@@ -136,6 +143,8 @@ namespace KlayGE
 
 		TexturePtr lights_start_tex;
 		TexturePtr intersected_light_indices_tex;
+
+		TexturePtr ms_mark_tex;
 #endif
 	};
 
@@ -199,6 +208,7 @@ namespace KlayGE
 		void AddDecal(RenderDecalPtr const & decal);
 
 		void SetupViewport(uint32_t index, FrameBufferPtr const & fb, uint32_t attrib);
+		void SetupViewport(uint32_t index, FrameBufferPtr const & fb, uint32_t attrib, uint32_t sample_count, uint32_t sample_quality);
 		void EnableViewport(uint32_t index, bool enable);
 		uint32_t Update(uint32_t pass);
 
@@ -243,15 +253,15 @@ namespace KlayGE
 
 		TexturePtr const & GBufferRT0Tex(uint32_t vp) const
 		{
-			return viewports_[vp].g_buffer_rt0_tex;
+			return viewports_[vp].g_buffer_ms_rt0_tex;
 		}
 		TexturePtr const & GBufferRT1Tex(uint32_t vp) const
 		{
-			return viewports_[vp].g_buffer_rt1_tex;
+			return viewports_[vp].g_buffer_ms_rt1_tex;
 		}
 		TexturePtr const & DepthTex(uint32_t vp) const
 		{
-			return viewports_[vp].g_buffer_depth_tex;
+			return viewports_[vp].g_buffer_ms_depth_tex;
 		}
 		TexturePtr const & GBufferRT0BackupTex(uint32_t vp) const
 		{
@@ -351,7 +361,8 @@ namespace KlayGE
 		void AppendIndirectLightingPassScanCode(uint32_t vp_index, uint32_t light_index);
 		void AppendShadingPassScanCode(uint32_t vp_index, PassTargetBuffer pass_tb);
 		void PreparePVP(PerViewport& pvp);
-		void GenerateGBuffer(PerViewport const & pvp, PassTargetBuffer pass_tb);
+		void GenerateMSGBuffer(PerViewport const & pvp, PassTargetBuffer pass_tb);
+		void GenerateSSGBuffer(PerViewport const & pvp, PassTargetBuffer pass_tb);
 		void PostGenerateGBuffer(PerViewport const & pvp);
 		void BuildLinearDepthMipmap(PerViewport const & pvp);
 		void RenderDecals(PerViewport const & pvp, PassType pass_type);
@@ -393,7 +404,7 @@ namespace KlayGE
 		uint32_t BeginPerfProfileDRJob(PerfRange& perf);
 		uint32_t EndPerfProfileDRJob(PerfRange& perf);
 		uint32_t RenderingStatsDRJob();
-		uint32_t GBufferGenerationDRJob(PerViewport& pvp, PassType pass_type);
+		uint32_t GBufferGenerationDRJob(PerViewport& pvp, PassType pass_type, bool multi_sample);
 		uint32_t GBufferProcessingDRJob(PerViewport const & pvp);
 		uint32_t OpaqueGBufferProcessingDRJob(PerViewport const & pvp);
 		uint32_t ShadowMapGenerationDRJob(PerViewport const & pvp, PassType pass_type, int32_t org_no, int32_t index_in_pass);
@@ -419,6 +430,7 @@ namespace KlayGE
 
 		RenderEffectPtr dr_effect_;
 #if DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
+		RenderEffectPtr ms_g_buffer_effect_;
 		uint32_t light_batch_;
 		uint32_t num_depth_slices_;
 		std::vector<float> depth_slices_;
@@ -477,6 +489,8 @@ namespace KlayGE
 		RenderTechnique* technique_light_depth_only_;
 		RenderTechnique* technique_light_stencil_;
 #elif DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
+		RenderTechnique* technique_resolve_g_buffers_;
+
 		RenderTechnique* technique_draw_light_index_point_;
 		RenderTechnique* technique_draw_light_index_spot_;
 		RenderTechnique* technique_lidr_ambient_;
@@ -553,6 +567,10 @@ namespace KlayGE
 #if DEFAULT_DEFERRED == TRIDITIONAL_DEFERRED
 		RenderEffectParameter* lighting_tex_param_;
 #elif DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
+		RenderEffectParameter* g_buffer_ms_rt0_tex_param_;
+		RenderEffectParameter* g_buffer_ms_rt1_tex_param_;
+		RenderEffectParameter* g_buffer_ms_ds_tex_param_;
+
 		RenderEffectParameter* min_max_depth_tex_param_;
 		RenderEffectParameter* lights_color_param_;
 		RenderEffectParameter* lights_pos_es_param_;

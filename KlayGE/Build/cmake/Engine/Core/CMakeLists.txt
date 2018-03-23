@@ -212,6 +212,7 @@ SET(RENDERING_EFFECT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/LightSourceProxy.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/MotionBlur.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/MultiRes.fxml
+	${KLAYGE_PROJECT_DIR}/media/RenderFX/MultiSampleGBuffers.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Noise.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Particle.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/PointSprite.fxml

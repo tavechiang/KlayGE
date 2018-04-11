@@ -141,10 +141,11 @@ namespace KlayGE
 		TexturePtr lighting_mask_tex;
 		FrameBufferPtr lighting_mask_fb;
 
+		TexturePtr multi_sample_mask_tex;
+		FrameBufferPtr multi_sample_mask_fb;
+
 		TexturePtr lights_start_tex;
 		TexturePtr intersected_light_indices_tex;
-
-		TexturePtr ms_mark_tex;
 #endif
 	};
 
@@ -529,7 +530,7 @@ namespace KlayGE
 		PostProcessPtr sm_filter_pp_;
 		PostProcessPtr csm_filter_pp_;
 		PostProcessPtr depth_to_esm_pp_;
-		PostProcessPtr depth_to_linear_pp_;
+		PostProcessPtr depth_to_linear_pps_[2];
 		PostProcessPtr depth_mipmap_pp_;
 
 		RenderEffectParameter* g_buffer_tex_param_;
@@ -592,11 +593,13 @@ namespace KlayGE
 		RenderEffectParameter* filtered_sms_2d_light_index_param_;
 		RenderEffectParameter* esms_scale_factor_param_;
 
-		RenderTechnique* technique_depth_to_tiled_min_max_;
+		RenderTechnique* technique_depth_to_tiled_min_max_[2];
 		RenderTechnique* technique_cldr_lighting_mask_;
+		RenderTechnique* technique_multi_sample_mask_;
 		RenderEffectParameter* near_q_far_param_;
 		RenderEffectParameter* width_height_param_;
 		RenderEffectParameter* depth_to_tiled_depth_in_tex_param_;
+		RenderEffectParameter* depth_to_tiled_linear_depth_in_ms_tex_param_;
 		RenderEffectParameter* depth_to_tiled_min_max_depth_rw_tex_param_;
 		RenderEffectParameter* linear_depth_rw_tex_param_;
 		RenderEffectParameter* upper_left_param_;

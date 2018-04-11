@@ -20,6 +20,7 @@
 	<parameter type="float4x4" name="inv_proj"/>
 
 	<parameter type="texture2D" name="src_tex"/>
+	<parameter type="texture2DMS" name="src_tex_ms"/>
 
 	<shader>
 		<![CDATA[
@@ -36,6 +37,14 @@ void DepthToLinearVS(float4 pos : POSITION,
 float4 DepthToLinearPS(float2 tc : TEXCOORD0) : SV_Target
 {
 	return WriteAFloat(non_linear_depth_to_linear(src_tex.Sample(point_sampler, tc).r, near_q_far.x, near_q_far.y), near_q_far.w);
+}
+
+float4 DepthToLinearMSPS(float2 tc : TEXCOORD0, uint sample_index : SV_SampleIndex) : SV_Target
+{
+	uint width, height, samples;
+	src_tex_ms.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	return WriteAFloat(non_linear_depth_to_linear(src_tex_ms.Load(coord, sample_index).r, near_q_far.x, near_q_far.y), near_q_far.w);
 }
 
 float4 DepthToESMPS(float2 tc : TEXCOORD0, float3 view_dir : TEXCOORD1) : SV_Target
@@ -55,6 +64,15 @@ float4 DepthToESMPS(float2 tc : TEXCOORD0, float3 view_dir : TEXCOORD1) : SV_Tar
 
 			<state name="vertex_shader" value="DepthToLinearVS()"/>
 			<state name="pixel_shader" value="DepthToLinearPS()"/>
+		</pass>
+	</technique>
+	<technique name="DepthToLinearMS">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="DepthToLinearVS()"/>
+			<state name="pixel_shader" value="DepthToLinearMSPS()"/>
 		</pass>
 	</technique>
 

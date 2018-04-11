@@ -5,6 +5,7 @@
 	<macro name="NUM_DEPTH_SLICES" value="4"/>
 	
 	<include name="DeferredRendering.fxml"/>
+	<include name="PostProcess.fxml"/>
 
 	<macro name="BLOCK_X" value="16"/>
 	<macro name="BLOCK_Y" value="16"/>
@@ -14,19 +15,25 @@
 	<parameter type="float4" name="near_q_far"/>
 	<parameter type="uint2" name="width_height"/>
 	<parameter type="texture2D" name="depth_in_tex"/>
+	<parameter type="texture2DMS" name="linear_depth_in_ms_tex"/>
 	<parameter type="rw_texture2D" elem_type="float2" name="min_max_depth_rw_tex"/>
 	<parameter type="rw_texture2D" elem_type="float" name="linear_depth_rw_tex"/>
 
 	<shader type="compute_shader" version="5">
 		<![CDATA[
-groupshared float2 min_max_z_sh[BLOCK_SIZE];
+groupshared float2 min_max_depth_sh[BLOCK_SIZE];
 
 [numthreads(BLOCK_X, BLOCK_Y, 1)]
 void DepthToTiledMinMaxCS(uint3 gid : SV_GroupID,
 							uint3 gtid : SV_GroupThreadID,
 							uint GI : SV_GroupIndex)
 {
-	float2 min_max_z = float2(asfloat(0x7F7FFFFF), 0.0f);
+	float2 min_max_depth = float2(asfloat(0x7F7FFFFF), 0.0f);
+
+#if MULTI_SAMPLE_INPUT
+	uint width, height, samples;
+	linear_depth_in_ms_tex.GetDimensions(width, height, samples);
+#endif
 	
 	uint2 tile_start = gid.xy * TILE_SIZE + gtid.xy;
 	for (uint tile_y = 0; tile_y < TILE_SIZE; tile_y += BLOCK_Y)
@@ -34,21 +41,33 @@ void DepthToTiledMinMaxCS(uint3 gid : SV_GroupID,
 		for (uint tile_x = 0; tile_x < TILE_SIZE; tile_x += BLOCK_X)
 		{
 			uint2 coord = tile_start + uint2(tile_x, tile_y);
-			float depth = non_linear_depth_to_linear(depth_in_tex.Load(uint3(min(coord, width_height), 0)).x, near_q_far.x, near_q_far.y);
+			uint2 input_coord = min(coord, width_height);
+#if MULTI_SAMPLE_INPUT
+			float pixel_min_depth = asfloat(0x7F7FFFFF);
+			for (uint i = 0; i < samples; ++ i)
+			{
+				float depth = linear_depth_in_ms_tex.Load(input_coord, i).x;
+				pixel_min_depth = min(pixel_min_depth, depth);
+				min_max_depth = float2(min(min_max_depth.x, depth), max(min_max_depth.y, depth));
+			}
+			linear_depth_rw_tex[coord] = pixel_min_depth;
+#else
+			float depth = non_linear_depth_to_linear(depth_in_tex.Load(uint3(input_coord, 0)).x, near_q_far.x, near_q_far.y);
 			linear_depth_rw_tex[coord] = depth;
-			min_max_z = float2(min(min_max_z.x, depth), max(min_max_z.y, depth));
+			min_max_depth = float2(min(min_max_depth.x, depth), max(min_max_depth.y, depth));
+#endif
 		}
 	}
 
-	min_max_z_sh[GI] = min_max_z;
+	min_max_depth_sh[GI] = min_max_depth;
 	GroupMemoryBarrierWithGroupSync();
 
 	for (uint offset = BLOCK_SIZE >> 1; offset > 32; offset >>= 1)
 	{
 		if (GI < offset)
 		{
-			min_max_z_sh[GI].x = min(min_max_z_sh[GI].x, min_max_z_sh[GI + offset].x);
-			min_max_z_sh[GI].y = max(min_max_z_sh[GI].y, min_max_z_sh[GI + offset].y);
+			min_max_depth_sh[GI].x = min(min_max_depth_sh[GI].x, min_max_depth_sh[GI + offset].x);
+			min_max_depth_sh[GI].y = max(min_max_depth_sh[GI].y, min_max_depth_sh[GI + offset].y);
 		}
 		GroupMemoryBarrierWithGroupSync();
 	}
@@ -56,23 +75,27 @@ void DepthToTiledMinMaxCS(uint3 gid : SV_GroupID,
 	{
 		if (GI < offset)
 		{
-			min_max_z_sh[GI].x = min(min_max_z_sh[GI].x, min_max_z_sh[GI + offset].x);
-			min_max_z_sh[GI].y = max(min_max_z_sh[GI].y, min_max_z_sh[GI + offset].y);
+			min_max_depth_sh[GI].x = min(min_max_depth_sh[GI].x, min_max_depth_sh[GI + offset].x);
+			min_max_depth_sh[GI].y = max(min_max_depth_sh[GI].y, min_max_depth_sh[GI + offset].y);
 		}
 	}
 	
 	if (0 == GI)
 	{
-		min_max_depth_rw_tex[gid.xy] = min_max_z_sh[0];
+		min_max_depth_rw_tex[gid.xy] = min_max_depth_sh[0];
 	}
 }
 		]]>
 	</shader>
 
 	<technique name="DepthToTiledMinMax">
+		<macro name="MULTI_SAMPLE_INPUT" value="0"/>
 		<pass name="p0">
 			<state name="compute_shader" value="DepthToTiledMinMaxCS()"/>
 		</pass>
+	</technique>
+	<technique name="DepthToTiledMinMaxMS" inherit="DepthToTiledMinMax">
+		<macro name="MULTI_SAMPLE_INPUT" value="1"/>
 	</technique>
 
 	<shader>
@@ -110,6 +133,58 @@ float4 ClusteredDRLightingMaskPS() : SV_Target
 
 			<state name="vertex_shader" value="ClusteredDRLightingMaskVS()"/>
 			<state name="pixel_shader" value="ClusteredDRLightingMaskPS()"/>
+		</pass>
+	</technique>
+
+	<parameter type="texture2DMS" name="g_buffer_ms_rt0_tex"/>
+	<parameter type="texture2DMS" name="g_buffer_ms_rt1_tex"/>
+	<parameter type="texture2DMS" name="g_buffer_ms_ds_tex"/>
+
+	<shader>
+		<![CDATA[
+float4 MultiSampleMaskPS(float2 texcoord : TEXCOORD0) : SV_Target
+{
+	uint width, height, samples;
+	g_buffer_ms_rt0_tex.GetDimensions(width, height, samples);
+	
+	int2 coord = texcoord * int2(width, height);
+
+	float4 rt0_s0 = g_buffer_ms_rt0_tex.Load(coord, 0);
+	float4 rt1_s0 = g_buffer_ms_rt1_tex.Load(coord, 0);
+	float depth_s0 = g_buffer_ms_ds_tex.Load(coord, 0).x;
+
+	bool is_multi_sample = false;
+	for (uint i = 1; i < samples; ++ i)
+	{
+		float4 rt0_sn = g_buffer_ms_rt0_tex.Load(coord, i);
+		float4 rt1_sn = g_buffer_ms_rt1_tex.Load(coord, i);
+		float depth_sn = g_buffer_ms_ds_tex.Load(coord, i).x;
+
+		float4 rt0_diff = rt0_sn - rt0_s0;
+		float4 rt1_diff = rt1_sn - rt1_s0;
+		if ((abs(depth_sn - depth_s0) > 1e-3f)
+			|| (dot(rt0_diff, rt0_diff) > 1e-3f)
+			|| (dot(rt1_diff, rt1_diff) > 1e-3f))
+		{
+			is_multi_sample = true;
+			break;
+		}
+	}
+
+	return is_multi_sample;
+}
+		]]>
+	</shader>
+
+	<technique name="MultiSampleMask">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="cull_mode" value="front"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="MultiSampleMaskPS()"/>
 		</pass>
 	</technique>
 

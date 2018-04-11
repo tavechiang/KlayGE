@@ -473,6 +473,7 @@ namespace KlayGE
 			if (cs_cldr_)
 			{
 				pvp.lighting_mask_fb = rf.MakeFrameBuffer();
+				pvp.multi_sample_mask_fb = rf.MakeFrameBuffer();
 			}
 			else
 			{
@@ -741,7 +742,8 @@ namespace KlayGE
 		depth_to_esm_pp_ = SyncLoadPostProcess("Depth.ppml", "DepthToESM");
 		depth_to_esm_pp_->InputPin(0, sm_depth_tex_);
 		depth_to_esm_pp_->OutputPin(0, sm_tex_);
-		depth_to_linear_pp_ = SyncLoadPostProcess("Depth.ppml", "DepthToLinear");
+		depth_to_linear_pps_[0] = SyncLoadPostProcess("Depth.ppml", "DepthToLinear");
+		depth_to_linear_pps_[1] = SyncLoadPostProcess("Depth.ppml", "DepthToLinearMS");
 		depth_mipmap_pp_ = SyncLoadPostProcess("Depth.ppml", "DepthMipmapBilinear");
 
 		g_buffer_tex_param_ = dr_effect->ParameterByName("g_buffer_tex");
@@ -811,12 +813,15 @@ namespace KlayGE
 
 		if (cs_cldr_)
 		{
-			technique_depth_to_tiled_min_max_ = dr_effect->TechniqueByName("DepthToTiledMinMax");
+			technique_depth_to_tiled_min_max_[0] = dr_effect->TechniqueByName("DepthToTiledMinMax");
+			technique_depth_to_tiled_min_max_[1] = dr_effect->TechniqueByName("DepthToTiledMinMaxMS");
 			technique_cldr_lighting_mask_ = dr_effect->TechniqueByName("ClusteredDRLightingMask");
+			technique_multi_sample_mask_ = dr_effect->TechniqueByName("MultiSampleMask");
 
 			near_q_far_param_ = dr_effect->ParameterByName("near_q_far");
 			width_height_param_ = dr_effect->ParameterByName("width_height");
 			depth_to_tiled_depth_in_tex_param_ = dr_effect->ParameterByName("depth_in_tex");
+			depth_to_tiled_linear_depth_in_ms_tex_param_ = dr_effect->ParameterByName("linear_depth_in_ms_tex");
 			depth_to_tiled_min_max_depth_rw_tex_param_ = dr_effect->ParameterByName("min_max_depth_rw_tex");
 			linear_depth_rw_tex_param_ = dr_effect->ParameterByName("linear_depth_rw_tex");
 			upper_left_param_ = dr_effect->ParameterByName("upper_left");
@@ -1014,7 +1019,7 @@ namespace KlayGE
 			depth_fmt = EF_R32F;
 		}
 
-		if ((sample_count == 1) && (sample_quality == 0))
+		if (sample_count == 1)
 		{
 			pvp.g_buffer_resolved_ds_tex = rf.MakeTexture2D(width, height, 1, 1, EF_D24S8, 1, 0,
 				EAH_GPU_Read | EAH_GPU_Write);
@@ -1042,7 +1047,7 @@ namespace KlayGE
 			EAH_GPU_Read | EAH_GPU_Write | EAH_Generate_Mips);
 		pvp.g_buffer_resolved_rt1_tex = rf.MakeTexture2D(width, height, 1, 1, fmt8, 1, 0,
 			EAH_GPU_Read | EAH_GPU_Write);
-		if ((sample_count == 1) && (sample_quality == 0))
+		if (sample_count == 1)
 		{
 			pvp.g_buffer_ms_rt0_tex = pvp.g_buffer_resolved_rt0_tex;
 			pvp.g_buffer_ms_rt1_tex = pvp.g_buffer_resolved_rt1_tex;
@@ -1057,7 +1062,7 @@ namespace KlayGE
 
 		pvp.g_buffer_resolved_depth_tex = rf.MakeTexture2D(width, height, MAX_IL_MIPMAP_LEVELS + 1, 1, depth_fmt,
 			1, 0, hint | EAH_Generate_Mips);
-		if ((sample_count == 1) && (sample_quality == 0))
+		if (sample_count == 1)
 		{
 			pvp.g_buffer_ms_depth_tex = pvp.g_buffer_resolved_depth_tex;
 		}
@@ -1273,10 +1278,11 @@ namespace KlayGE
 			pvp.lighting_mask_fb->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*pvp.lighting_mask_tex, 0, 1, 0));
 			pvp.lighting_mask_fb->Attach(FrameBuffer::ATT_DepthStencil, ss_ds_view);
 
-			if ((sample_count != 1) || (sample_quality != 0))
+			if (sample_count != 1)
 			{
-				pvp.ms_mark_tex = rf.MakeTexture2D(width, height, 1, 1, lighting_mask_fmt, 1, 0,
-					EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered);
+				pvp.multi_sample_mask_tex = rf.MakeTexture2D(width, height, 1, 1, lighting_mask_fmt, 1, 0,
+					EAH_GPU_Read | EAH_GPU_Write);
+				pvp.multi_sample_mask_fb->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*pvp.multi_sample_mask_tex, 0, 1, 0));
 			}
 
 			ElementFormat light_indices_fmt;
@@ -2138,6 +2144,19 @@ namespace KlayGE
 	{
 		auto& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
+#if DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
+		if (pvp.sample_count != 1)
+		{
+			*(dr_effect_->ParameterByName("g_buffer_ms_rt0_tex")) = pvp.g_buffer_ms_rt0_tex;
+			*(dr_effect_->ParameterByName("g_buffer_ms_rt1_tex")) = pvp.g_buffer_ms_rt1_tex;
+			*(dr_effect_->ParameterByName("g_buffer_ms_ds_tex")) = pvp.g_buffer_ms_ds_tex;
+
+			re.BindFrameBuffer(pvp.multi_sample_mask_fb);
+			re.CurFrameBuffer()->Attached(FrameBuffer::ATT_Color0)->ClearColor(Color(0, 0, 0, 0));
+			re.Render(*dr_effect_, *technique_multi_sample_mask_, *rl_quad_);
+		}
+#endif
+
 		pvp.g_buffer_resolved_rt0_tex->BuildMipSubLevels();
 
 #if DEFAULT_DEFERRED == LIGHT_INDEXED_DEFERRED
@@ -2161,9 +2180,9 @@ namespace KlayGE
 
 	void DeferredRenderingLayer::BuildLinearDepthMipmap(PerViewport const & pvp)
 	{
-		depth_to_linear_pp_->InputPin(0, pvp.g_buffer_resolved_ds_tex);
-		depth_to_linear_pp_->OutputPin(0, pvp.g_buffer_resolved_depth_tex);
-		depth_to_linear_pp_->Apply();
+		depth_to_linear_pps_[0]->InputPin(0, pvp.g_buffer_resolved_ds_tex);
+		depth_to_linear_pps_[0]->OutputPin(0, pvp.g_buffer_resolved_depth_tex);
+		depth_to_linear_pps_[0]->Apply();
 
 		pvp.g_buffer_resolved_depth_tex->BuildMipSubLevels();
 	}
@@ -3899,14 +3918,29 @@ namespace KlayGE
 
 	void DeferredRenderingLayer::CreateDepthMinMaxMapCS(PerViewport const & pvp)
 	{
-		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+		auto& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+
+		if (pvp.sample_count != 1)
+		{
+			depth_to_linear_pps_[1]->InputPin(0, pvp.g_buffer_ms_ds_tex);
+			depth_to_linear_pps_[1]->OutputPin(0, pvp.g_buffer_ms_depth_tex);
+			depth_to_linear_pps_[1]->Apply();
+		}
+
 		re.BindFrameBuffer(re.DefaultFrameBuffer());
 		re.DefaultFrameBuffer()->Discard(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth | FrameBuffer::CBM_Stencil);
 
 		TexturePtr const & in_tex = pvp.g_buffer_resolved_ds_tex;
 		TexturePtr const & out_tex = pvp.g_buffer_min_max_depth_texs.back();
 		*width_height_param_ = uint2(in_tex->Width(0) - 1, in_tex->Height(0) - 1);
-		*depth_to_tiled_depth_in_tex_param_ = in_tex;
+		if (pvp.sample_count == 1)
+		{
+			*depth_to_tiled_depth_in_tex_param_ = in_tex;
+		}
+		else
+		{
+			*depth_to_tiled_linear_depth_in_ms_tex_param_ = pvp.g_buffer_ms_depth_tex;
+		}
 		*depth_to_tiled_min_max_depth_rw_tex_param_ = out_tex;
 		*linear_depth_rw_tex_param_ = pvp.g_buffer_resolved_depth_tex;
 
@@ -3915,7 +3949,7 @@ namespace KlayGE
 		float4 near_q_far(camera->NearPlane() * q, q, camera->FarPlane(), 1 / camera->FarPlane());
 		*near_q_far_param_ = near_q_far;
 
-		re.Dispatch(*dr_effect_, *technique_depth_to_tiled_min_max_, out_tex->Width(0), out_tex->Height(0), 1);
+		re.Dispatch(*dr_effect_, *technique_depth_to_tiled_min_max_[pvp.sample_count != 1], out_tex->Width(0), out_tex->Height(0), 1);
 
 		pvp.g_buffer_resolved_depth_tex->BuildMipSubLevels();
 	}
@@ -4048,7 +4082,11 @@ namespace KlayGE
 
 		float q = camera->FarPlane() / (camera->FarPlane() - camera->NearPlane());
 		float4 near_q_far(camera->NearPlane() * q, q, camera->FarPlane(), 1 / camera->FarPlane());
-		depth_to_linear_pp_->SetParam(0, near_q_far);
+		depth_to_linear_pps_[0]->SetParam(0, near_q_far);
+		if (pvp.sample_count != 1)
+		{
+			depth_to_linear_pps_[1]->SetParam(0, near_q_far);
+		}
 
 		*g_buffer_tex_param_ = pvp.g_buffer_resolved_rt0_tex;
 		*depth_tex_param_ = pvp.g_buffer_resolved_depth_tex;

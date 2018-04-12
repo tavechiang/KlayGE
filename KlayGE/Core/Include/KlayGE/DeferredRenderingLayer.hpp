@@ -138,8 +138,11 @@ namespace KlayGE
 
 		TexturePtr temp_shading_tex;
 
-		TexturePtr lighting_mask_tex;
-		FrameBufferPtr lighting_mask_fb;
+		TexturePtr lighting_mask_ss_tex;
+		FrameBufferPtr lighting_mask_ss_fb;
+
+		TexturePtr lighting_mask_ms_tex;
+		FrameBufferPtr lighting_mask_ms_fb;
 
 		TexturePtr multi_sample_mask_tex;
 		FrameBufferPtr multi_sample_mask_fb;
@@ -508,7 +511,7 @@ namespace KlayGE
 
 		RenderTechnique* technique_cldr_shadowing_unified_;
 		RenderTechnique* technique_cldr_light_intersection_unified_;
-		RenderTechnique* technique_cldr_unified_;
+		RenderTechnique* technique_cldr_unified_[2];
 #endif
 		static uint32_t const MAX_NUM_SHADOWED_LIGHTS = 4;
 		static uint32_t const MAX_NUM_SHADOWED_SPOT_LIGHTS = 4;
@@ -594,7 +597,7 @@ namespace KlayGE
 		RenderEffectParameter* esms_scale_factor_param_;
 
 		RenderTechnique* technique_depth_to_tiled_min_max_[2];
-		RenderTechnique* technique_cldr_lighting_mask_;
+		RenderTechnique* technique_cldr_lighting_mask_[2];
 		RenderTechnique* technique_multi_sample_mask_;
 		RenderEffectParameter* near_q_far_param_;
 		RenderEffectParameter* width_height_param_;
@@ -606,6 +609,7 @@ namespace KlayGE
 		RenderEffectParameter* x_dir_param_;
 		RenderEffectParameter* y_dir_param_;
 		RenderEffectParameter* lighting_mask_tex_param_;
+		RenderEffectParameter* lighting_mask_ms_tex_param_;
 		RenderEffectParameter* shading_in_tex_param_;
 		RenderEffectParameter* shading_rw_tex_param_;
 		RenderEffectParameter* lights_type_param_;

@@ -39,11 +39,11 @@ namespace
 		{
 		}
 
-		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
+		void operator()(LightSource& /*light*/, float /*app_time*/, float /*elapsed_time*/)
 		{
-			light.Direction(float3(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f),
+			/*light.Direction(float3(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f),
 				1, MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f)));
-			light.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));
+			light.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));*/
 		}
 
 	private:
@@ -59,9 +59,9 @@ namespace
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(LightSource& /*light*/, float /*app_time*/, float /*elapsed_time*/)
 		{
-			light.Direction(float3(sin(app_time) * 0.3f, -1, 0.1f));
+			//light.Direction(float3(sin(app_time) * 0.3f, -1, 0.1f));
 		}
 	};
 
@@ -73,10 +73,10 @@ namespace
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(LightSource& /*light*/, float /*app_time*/, float /*elapsed_time*/)
 		{
-			light.ModelMatrix(MathLib::translation(sin(app_time * 1000 * move_speed_), 0.0f, 0.0f)
-				* MathLib::translation(pos_));
+			/*light.ModelMatrix(MathLib::translation(sin(app_time * 1000 * move_speed_), 0.0f, 0.0f)
+				* MathLib::translation(pos_));*/
 		}
 
 	private:
@@ -276,7 +276,7 @@ void DeferredRenderingApp::OnCreate()
 	ps_ = SyncLoadParticleSystem("Fire.psml");
 	ps_->Gravity(0.5f);
 	ps_->MediaDensity(0.5f);
-	ps_->AddToSceneManager();
+	//ps_->AddToSceneManager();
 
 	float const SCALE = 3;
 	ps_->ModelMatrix(MathLib::scaling(SCALE, SCALE, SCALE));
@@ -462,7 +462,7 @@ void DeferredRenderingApp::DoUpdateOverlay()
 
 uint32_t DeferredRenderingApp::DoUpdate(uint32_t pass)
 {
-	if (0 == pass)
+	/*if (0 == pass)
 	{
 		for (uint32_t i = 0; i < particle_lights_.size(); ++ i)
 		{
@@ -474,7 +474,7 @@ uint32_t DeferredRenderingApp::DoUpdate(uint32_t pass)
 			particle_lights_[i]->Position(float3(6.0f * sin(factor * i),
 				5.0f + 10.0f / particle_lights_.size() * i, 6.0f * cos(factor * i) + 1));
 		}
-	}
+	}*/
 
 	return deferred_rendering_->Update(pass);
 }

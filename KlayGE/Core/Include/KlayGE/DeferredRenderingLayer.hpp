@@ -106,16 +106,22 @@ namespace KlayGE
 		TexturePtr vdm_transition_tex;
 		TexturePtr vdm_count_tex;
 
-		FrameBufferPtr shading_fb;
-		TexturePtr shading_tex;
+		FrameBufferPtr shading_ss_fb;
+		TexturePtr shading_ss_tex;
+		FrameBufferPtr shading_ms_fb;
+		TexturePtr shading_ms_tex;
 
 		uint32_t num_cascades;
 		std::array<TexturePtr, CascadedShadowLayer::MAX_NUM_CASCADES> filtered_csm_texs;
 
-		std::array<FrameBufferPtr, 2> merged_shading_fbs;
-		std::array<TexturePtr, 2> merged_shading_texs;
-		std::array<FrameBufferPtr, 2> merged_depth_fbs;
-		std::array<TexturePtr, 2> merged_depth_texs;
+		std::array<FrameBufferPtr, 2> merged_shading_ss_fbs;
+		std::array<TexturePtr, 2> merged_shading_ss_texs;
+		std::array<FrameBufferPtr, 2> merged_depth_ss_fbs;
+		std::array<TexturePtr, 2> merged_depth_ss_texs;
+		std::array<FrameBufferPtr, 2> merged_shading_ms_fbs;
+		std::array<TexturePtr, 2> merged_shading_ms_texs;
+		std::array<FrameBufferPtr, 2> merged_depth_ms_fbs;
+		std::array<TexturePtr, 2> merged_depth_ms_texs;
 		uint32_t curr_merged_buffer_index;
 
 		TexturePtr small_ssvo_tex;
@@ -136,7 +142,11 @@ namespace KlayGE
 		FrameBufferPtr light_index_fb;
 		TexturePtr light_index_tex;
 
-		TexturePtr temp_shading_tex;
+		TexturePtr temp_shading_ss_tex;
+		TexturePtr temp_shading_ms_tex;
+		FrameBufferPtr temp_shading_ms_fb;
+
+		TexturePtr temp_shading_tex_array;
 
 		TexturePtr lighting_mask_ss_tex;
 		FrameBufferPtr lighting_mask_ss_fb;
@@ -231,23 +241,23 @@ namespace KlayGE
 #endif
 		TexturePtr const & ShadingTex(uint32_t vp) const
 		{
-			return viewports_[vp].shading_tex;
+			return viewports_[vp].shading_ss_tex;
 		}
 		TexturePtr const & CurrFrameShadingTex(uint32_t vp) const
 		{
-			return viewports_[vp].merged_shading_texs[viewports_[vp].curr_merged_buffer_index];
+			return viewports_[vp].merged_shading_ss_texs[viewports_[vp].curr_merged_buffer_index];
 		}
 		TexturePtr const & CurrFrameDepthTex(uint32_t vp) const
 		{
-			return viewports_[vp].merged_depth_texs[viewports_[vp].curr_merged_buffer_index];
+			return viewports_[vp].merged_depth_ss_texs[viewports_[vp].curr_merged_buffer_index];
 		}
 		TexturePtr const & PrevFrameShadingTex(uint32_t vp) const
 		{
-			return viewports_[vp].merged_shading_texs[!viewports_[vp].curr_merged_buffer_index];
+			return viewports_[vp].merged_shading_ss_texs[!viewports_[vp].curr_merged_buffer_index];
 		}
 		TexturePtr const & PrevFrameDepthTex(uint32_t vp) const
 		{
-			return viewports_[vp].merged_depth_texs[!viewports_[vp].curr_merged_buffer_index];
+			return viewports_[vp].merged_depth_ss_texs[!viewports_[vp].curr_merged_buffer_index];
 		}
 
 		TexturePtr const & SmallSSVOTex(uint32_t vp) const
@@ -611,7 +621,9 @@ namespace KlayGE
 		RenderEffectParameter* lighting_mask_tex_param_;
 		RenderEffectParameter* lighting_mask_ms_tex_param_;
 		RenderEffectParameter* shading_in_tex_param_;
+		RenderEffectParameter* shading_in_ms_tex_param_;
 		RenderEffectParameter* shading_rw_tex_param_;
+		RenderEffectParameter* shading_rw_tex_array_param_;
 		RenderEffectParameter* lights_type_param_;
 		RenderEffectParameter* lights_start_in_tex_param_;
 		RenderEffectParameter* lights_start_rw_tex_param_;
@@ -619,7 +631,7 @@ namespace KlayGE
 		RenderEffectParameter* intersected_light_indices_rw_tex_param_;
 		RenderEffectParameter* depth_slices_param_;
 		RenderEffectParameter* depth_slices_shading_param_;
-		PostProcessPtr copy_pp_;
+		PostProcessPtr copy_pp_[2];
 #endif
 
 		RenderEffectParameter* skylight_diff_spec_mip_param_;

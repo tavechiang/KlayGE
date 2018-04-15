@@ -5,6 +5,8 @@
 
 	<parameter type="texture2D" name="curr_tex"/>
 	<parameter type="texture2D" name="prev_tex"/>
+	<parameter type="texture2DMS" name="curr_tex_ms"/>
+	<parameter type="texture2DMS" name="prev_tex_ms"/>
 	<parameter type="sampler" name="point_sampler">
 		<state name="filtering" value="min_mag_mip_point"/>
 		<state name="address_u" value="clamp"/>
@@ -16,6 +18,19 @@
 float4 TemporalAAPS(float2 tc0 : TEXCOORD0) : SV_Target
 {
 	return (curr_tex.Sample(point_sampler, tc0) + prev_tex.Sample(point_sampler, tc0)) * 0.5f;
+}   
+
+float4 TemporalAAMSPS(float2 tc0 : TEXCOORD0) : SV_Target
+{
+	uint width, height, samples;
+	curr_tex_ms.GetDimensions(width, height, samples);
+	int2 coord = tc0 * int2(width, height);
+	float4 ret = 0;
+	for (uint i = 0; i < samples; ++ i)
+	{
+		ret += curr_tex_ms.Load(coord, i) + prev_tex_ms.Load(coord, i);
+	}
+	return ret / (samples * 2);
 }
 		]]>
 	</shader>
@@ -24,9 +39,14 @@ float4 TemporalAAPS(float2 tc0 : TEXCOORD0) : SV_Target
 		<pass name="p0">
 			<state name="depth_enable" value="false"/>
 			<state name="depth_write_mask" value="0"/>
-			
+
 			<state name="vertex_shader" value="PostProcessVS()"/>
 			<state name="pixel_shader" value="TemporalAAPS()"/>
+		</pass>
+	</technique>
+	<technique name="TemporalAAMS" inherit="TemporalAA">
+		<pass name="p0">
+			<state name="pixel_shader" value="TemporalAAMSPS()"/>
 		</pass>
 	</technique>
 </effect>

@@ -467,7 +467,7 @@ namespace KlayGE
 		PostProcessPtr ssr_pp_;
 		bool ssr_enabled_;
 
-		PostProcessPtr taa_pp_;
+		PostProcessPtr taa_pp_[2];
 		bool taa_enabled_;
 
 		PostProcessPtr vdm_composition_pp_;
@@ -494,10 +494,10 @@ namespace KlayGE
 		std::array<std::array<RenderTechnique*, 5>, LightSource::LT_NumLightTypes> technique_shadows_;
 		RenderTechnique* technique_no_lighting_;
 		RenderTechnique* technique_shading_;
-		std::array<RenderTechnique*, 2> technique_merge_shadings_;
-		std::array<RenderTechnique*, 2> technique_merge_depths_;
-		RenderTechnique* technique_copy_shading_depth_;
-		RenderTechnique* technique_copy_depth_;
+		std::array<RenderTechnique*, 4> technique_merge_shadings_;
+		std::array<RenderTechnique*, 4> technique_merge_depths_;
+		RenderTechnique* technique_copy_shading_depth_[2];
+		RenderTechnique* technique_copy_depth_[2];
 #if DEFAULT_DEFERRED == TRIDITIONAL_DEFERRED
 		std::array<RenderTechnique*, LightSource::LT_NumLightTypes> technique_lights_;
 		RenderTechnique* technique_light_depth_only_;
@@ -549,7 +549,9 @@ namespace KlayGE
 		RenderEffectParameter* g_buffer_tex_param_;
 		RenderEffectParameter* g_buffer_1_tex_param_;
 		RenderEffectParameter* depth_tex_param_;
+		RenderEffectParameter* depth_ms_tex_param_;
 		RenderEffectParameter* shading_tex_param_;
+		RenderEffectParameter* shading_ms_tex_param_;
 		RenderEffectParameter* light_attrib_param_;
 		RenderEffectParameter* light_radius_extend_param_;
 		RenderEffectParameter* light_color_param_;

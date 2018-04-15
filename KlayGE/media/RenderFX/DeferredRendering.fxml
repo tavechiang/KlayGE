@@ -71,6 +71,7 @@
 	<parameter type="float2" name="inv_width_height"/>
 	<parameter type="texture2D" name="g_buffer_tex"/>
 	<parameter type="texture2D" name="depth_tex"/>
+	<parameter type="texture2DMS" name="depth_ms_tex"/>
 
 	<shader>
 		<![CDATA[
@@ -660,6 +661,7 @@ float4 DeferredShadowingDirectionalPS(
 	<parameter type="texture2D" name="lighting_tex"/>
 	<parameter type="texture2D" name="g_buffer_1_tex"/>
 	<parameter type="texture2D" name="shading_tex"/>
+	<parameter type="texture2DMS" name="shading_ms_tex"/>
 
 	<parameter type="float2" name="near_q"/>
 
@@ -738,9 +740,25 @@ float4 MergeShadingPS(float2 tc : TEXCOORD0) : SV_Target
 	return shading_tex.Sample(point_sampler, tc);
 }
 
+float4 MergeShadingMSPS(float2 tc : TEXCOORD0, uint sample_index : SV_SampleIndex) : SV_Target
+{
+	uint width, height, samples;
+	shading_ms_tex.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	return shading_ms_tex.Load(coord, sample_index);
+}
+
 float4 MergeDepthPS(float2 tc : TEXCOORD0) : SV_Target
 {
 	return depth_tex.Sample(point_sampler, tc);
+}
+
+float4 MergeDepthMSPS(float2 tc : TEXCOORD0, uint sample_index : SV_SampleIndex) : SV_Target
+{
+	uint width, height, samples;
+	depth_ms_tex.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	return depth_ms_tex.Load(coord, sample_index);
 }
 
 #if !KLAYGE_OPENGLES
@@ -751,11 +769,48 @@ void CopyShadingDepthPS(float2 tc : TEXCOORD0,
 	oDepth = linear_depth_to_non_linear(depth_tex.Sample(point_sampler, tc).x, near_q.x, near_q.y);
 }
 
+void CopyShadingDepthMSPS(float2 tc : TEXCOORD0,
+		out float4 oClr : SV_Target0, out float oDepth : SV_Depth)
+{
+	uint width, height, samples;
+	shading_ms_tex.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	oClr = 0;
+	for (uint i = 0; i < samples; ++ i)
+	{
+		oClr += shading_ms_tex.Load(coord, i);
+	}
+	oClr /= samples;
+
+	oDepth = asfloat(0x7F7FFFFF);
+	for (i = 0; i < samples; ++ i)
+	{
+		oDepth = min(oDepth, depth_ms_tex.Load(coord, i).x);
+	}
+}
+
 void CopyDepthPS(float2 tc : TEXCOORD0,
 		out float4 oClr : SV_Target0, out float oDepth : SV_Depth)
 {
 	oClr = 0;
 	oDepth = linear_depth_to_non_linear(depth_tex.Sample(point_sampler, tc).x, near_q.x, near_q.y);
+}
+
+void CopyDepthMSPS(float2 tc : TEXCOORD0,
+		out float4 oClr : SV_Target0, out float oDepth : SV_Depth)
+{
+	oClr = 0;
+	oDepth = linear_depth_to_non_linear(depth_tex.Sample(point_sampler, tc).x, near_q.x, near_q.y);
+
+	uint width, height, samples;
+	shading_ms_tex.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	oDepth = asfloat(0x7F7FFFFF);
+	for (uint i = 0; i < samples; ++ i)
+	{
+		oDepth = min(oDepth, depth_ms_tex.Load(coord, i).x);
+	}
+	oDepth = linear_depth_to_non_linear(oDepth, near_q.x, near_q.y);
 }
 #else
 void CopyShadingDepthPS(float2 tc : TEXCOORD0,
@@ -764,7 +819,27 @@ void CopyShadingDepthPS(float2 tc : TEXCOORD0,
 	oClr = shading_tex.Sample(point_sampler, tc);
 }
 
+void CopyShadingDepthMSPS(float2 tc : TEXCOORD0,
+		out float4 oClr : SV_Target0)
+{
+	uint width, height, samples;
+	shading_ms_tex.GetDimensions(width, height, samples);
+	int2 coord = tc * int2(width, height);
+	oClr = 0;
+	for (uint i = 0; i < samples; ++ i)
+	{
+		oClr += shading_ms_tex.Load(coord, i);
+	}
+	oClr /= samples;
+}
+
 void CopyDepthPS(float2 tc : TEXCOORD0,
+		out float4 oClr : SV_Target0)
+{
+	oClr = 0;
+}
+
+void CopyDepthMSPS(float2 tc : TEXCOORD0,
 		out float4 oClr : SV_Target0)
 {
 	oClr = 0;
@@ -827,6 +902,11 @@ void CopyDepthPS(float2 tc : TEXCOORD0,
 			<state name="pixel_shader" value="MergeShadingPS()"/>
 		</pass>
 	</technique>
+	<technique name="MergeShadingMSTech" inherit="MergeShadingTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="MergeShadingMSPS()"/>
+		</pass>
+	</technique>
 	<technique name="MergeShadingAlphaBlendTech">
 		<pass name="p0">
 			<state name="cull_mode" value="front"/>
@@ -854,10 +934,20 @@ void CopyDepthPS(float2 tc : TEXCOORD0,
 			<state name="pixel_shader" value="MergeShadingPS()"/>
 		</pass>
 	</technique>
+	<technique name="MergeShadingAlphaBlendMSTech" inherit="MergeShadingAlphaBlendTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="MergeShadingMSPS()"/>
+		</pass>
+	</technique>
 
 	<technique name="MergeDepthTech" inherit="MergeShadingTech">
 		<pass name="p0">			
 			<state name="pixel_shader" value="MergeDepthPS()"/>
+		</pass>
+	</technique>
+	<technique name="MergeDepthMSTech" inherit="MergeDepthTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="MergeDepthMSPS()"/>
 		</pass>
 	</technique>
 
@@ -873,6 +963,11 @@ void CopyDepthPS(float2 tc : TEXCOORD0,
 			<state name="back_stencil_pass" value="keep"/>
 		</pass>
 	</technique>
+	<technique name="MergeDepthAlphaBlendMSTech" inherit="MergeDepthAlphaBlendTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="MergeDepthMSPS()"/>
+		</pass>
+	</technique>
 
 	<technique name="CopyShadingDepthTech">
 		<pass name="p0">
@@ -882,6 +977,11 @@ void CopyDepthPS(float2 tc : TEXCOORD0,
 
 			<state name="vertex_shader" value="ShadingVS()"/>
 			<state name="pixel_shader" value="CopyShadingDepthPS()"/>
+		</pass>
+	</technique>
+	<technique name="CopyShadingDepthMSTech" inherit="CopyShadingDepthTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="CopyShadingDepthMSPS()"/>
 		</pass>
 	</technique>
 	<technique name="CopyDepthTech">
@@ -894,6 +994,11 @@ void CopyDepthPS(float2 tc : TEXCOORD0,
 
 			<state name="vertex_shader" value="ShadingVS()"/>
 			<state name="pixel_shader" value="CopyDepthPS()"/>
+		</pass>
+	</technique>
+	<technique name="CopyDepthMSTech" inherit="CopyDepthTech">
+		<pass name="p0">
+			<state name="pixel_shader" value="CopyDepthMSPS()"/>
 		</pass>
 	</technique>
 </effect>

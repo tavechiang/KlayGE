@@ -458,10 +458,10 @@ namespace KlayGE
 		PostProcessPtr ssvo_pp_;
 		PostProcessPtr ssvo_blur_pp_;
 
-		PostProcessPtr sss_blur_pp_;
+		PostProcessPtr sss_blur_pp_[2];
 		bool sss_enabled_;
 
-		PostProcessPtr translucency_pp_;
+		PostProcessPtr translucency_pp_[2];
 		bool translucency_enabled_;
 
 		PostProcessPtr ssr_pp_;

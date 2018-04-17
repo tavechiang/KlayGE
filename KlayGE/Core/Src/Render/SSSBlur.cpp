@@ -36,10 +36,10 @@
 
 namespace KlayGE
 {
-	SSSBlurPP::SSSBlurPP()
+	SSSBlurPP::SSSBlurPP(bool msaa)
 			: PostProcess(L"SSSBlurPP", false,
 				{ "strength", "correction" },
-				{ "src_tex", "depth_tex" },
+				{ msaa ? "src_tex_ms" : "src_tex", msaa ? "depth_ms_tex" : "depth_tex" },
 				{ "output" },
 				RenderEffectPtr(), nullptr)
 	{
@@ -47,24 +47,24 @@ namespace KlayGE
 		mrt_blend_support_ = (caps.max_simultaneous_rts > 1) && caps.independent_blend_support;
 
 		RenderEffectPtr effect = SyncLoadRenderEffect("SSS.fxml");
-		copy_tech_ = effect->TechniqueByName("Copy");
-		blur_x_tech_ = effect->TechniqueByName("BlurX");
+		copy_tech_ = effect->TechniqueByName(msaa ? "CopyMS" : "Copy");
+		blur_x_tech_ = effect->TechniqueByName(msaa ? "BlurXMS" : "BlurX");
 		if (mrt_blend_support_)
 		{
-			std::string blur_y_name = "BlurY1";
+			std::string blur_y_name = msaa ? "BlurYMS1" : "BlurY1";
 			for (uint32_t i = 0; i < 3; ++ i)
 			{
-				blur_y_name[5] = static_cast<char>('1' + i);
+				blur_y_name.back() = static_cast<char>('1' + i);
 				blur_y_techs_[i] = effect->TechniqueByName(blur_y_name);
 			}
 		}
 		else
 		{
 			blur_y_techs_[0] = blur_x_tech_;
-			std::string accum_name = "Accum1";
+			std::string accum_name = msaa ? "AccumMS1" : "Accum1";
 			for (uint32_t i = 0; i < 3; ++ i)
 			{
-				accum_name[5] = static_cast<char>('1' + i);
+				accum_name.back() = static_cast<char>('1' + i);
 				accum_techs_[i] = effect->TechniqueByName(accum_name);
 			}
 		}
@@ -74,7 +74,7 @@ namespace KlayGE
 		blur_x_fb_ = rf.MakeFrameBuffer();
 		blur_y_fb_ = rf.MakeFrameBuffer();
 
-		src_tex_param_ = effect->ParameterByName("src_tex");
+		src_tex_param_ = effect->ParameterByName(msaa ? "src_tex_ms" : "src_tex");
 		step_param_ = effect->ParameterByName("step");
 		far_plane_param_ = effect->ParameterByName("far_plane");
 	}
@@ -86,8 +86,10 @@ namespace KlayGE
 		if (0 == index)
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-			blur_x_tex_ = rf.MakeTexture2D(tex->Width(0), tex->Height(0), 1, 1, tex->Format(), 1, 0, EAH_GPU_Read | EAH_GPU_Write);
-			blur_y_tex_ = rf.MakeTexture2D(tex->Width(0), tex->Height(0), 1, 1, tex->Format(), 1, 0, EAH_GPU_Read | EAH_GPU_Write);
+			blur_x_tex_ = rf.MakeTexture2D(tex->Width(0), tex->Height(0), 1, 1, tex->Format(), tex->SampleCount(), tex->SampleQuality(),
+				EAH_GPU_Read | EAH_GPU_Write);
+			blur_y_tex_ = rf.MakeTexture2D(tex->Width(0), tex->Height(0), 1, 1, tex->Format(), tex->SampleCount(), tex->SampleQuality(),
+				EAH_GPU_Read | EAH_GPU_Write);
 
 			blur_x_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*blur_x_tex_, 0, 1, 0));
 			blur_x_fb_->Attach(FrameBuffer::ATT_DepthStencil, frame_buffer_->Attached(FrameBuffer::ATT_DepthStencil));
